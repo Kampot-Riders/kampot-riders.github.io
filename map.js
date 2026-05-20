@@ -1,7 +1,6 @@
 const DEFAULT_CENTER = [10.594, 104.162];
 const DEFAULT_ZOOM = 14;
 const SATELLITE_MAX_ZOOM = 18;
-const SATELLITE_INFO_NOTICE = "Esri Satellite imagery is older than Google's, with limited zoom. Free tiles, no API key required.";
 
 function layerLabel(layerId) {
   if (layerId === "osm") return "OSM map";
@@ -137,15 +136,6 @@ export function createMapController({ selectedLayerId, onLayerSelected, onNotice
     closeLayerMenu();
     setLayerButtonState(activeLayerId);
     updateOfflineBadge();
-
-    // Inform the user — once per explicit selection — about Esri's limits.
-    if (!silent && activeLayerId === "satellite") {
-      onNotice({
-        text: SATELLITE_INFO_NOTICE,
-        actionLabel: "",
-        actionLayerId: ""
-      });
-    }
 
     if (!silent) onLayerSelected(activeLayerId);
   }

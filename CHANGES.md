@@ -46,3 +46,7 @@ Replace files at the repo root with everything in this folder. Commit, push, Git
 
 ## Suggestion for later
 For Cambodia specifically, consider adding **OpenTopoMap** as a fourth layer — it shows contour lines and is excellent for cycling (climbs are visible). It uses tile.opentopomap.org, also free and key-less. Let me know if you want it wired in.
+
+## Build v10
+- **Version badge in the header** (`v10`) next to the title — confirms at a glance that a new deploy is actually being served. The constant `APP_VERSION` in `app.js` is kept in sync with `CACHE_VERSION` in `sw.js`; bump both on each release.
+- **Removed the Esri satellite info notice** that popped up on every Satellite selection. The zoom cap (18) and the blank-screen zoom clamp stay; only the text notice is gone. Tile-failure notices (when a layer is genuinely down) are unaffected.

@@ -16,6 +16,10 @@ import {
 } from "./storage.js";
 import { createMapController } from "./map.js";
 
+// Bump this on every deploy (keep it in sync with CACHE_VERSION in sw.js)
+// so the header badge confirms the new build is actually being served.
+const APP_VERSION = "v10";
+
 const AUTO_PAUSE_RADIUS = 15;
 const MIN_ACCURACY = 30;
 const ALTITUDE_SMOOTH = 3;
@@ -692,6 +696,9 @@ function handleVisibilityChange() {
 }
 
 async function init() {
+  const versionTag = document.getElementById("versionTag");
+  if (versionTag) versionTag.textContent = APP_VERSION;
+
   await openDB();
   mapController = createMapController({
     selectedLayerId: state.selectedLayer,

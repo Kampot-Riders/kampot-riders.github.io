@@ -60,6 +60,15 @@ input {
   -webkit-text-fill-color: transparent;
 }
 
+.version-tag {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  align-self: flex-end;
+  padding-bottom: 2px;
+}
+
 .header-left,
 .header-right {
   display: flex;

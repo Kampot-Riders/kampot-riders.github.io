@@ -1,4 +1,4 @@
-const CACHE_VERSION = "kr-v8";
+const CACHE_VERSION = "kr-v10";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const TILE_CACHE = `${CACHE_VERSION}-osm-tiles`;
 const TILE_CACHE_LIMIT = 250;
