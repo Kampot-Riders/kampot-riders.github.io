@@ -34,7 +34,12 @@
 - Dropped the dead Google tile request branch (you weren't using it).
 
 ## What's unchanged
-`gps.js`, `gpx.js`, `storage.js` are byte-identical to the version you uploaded.
+`gps.js`, `storage.js` are byte-identical to the version you uploaded.
+
+## iOS GPX export fix (`gpx.js`)
+- The old export used the `<a download>` + Blob trick. **Safari iOS ignores the `download` attribute** — it would open the GPX as raw XML in a tab (or do nothing in standalone PWA mode), so the file was never reliably saved.
+- `downloadGPX` is now async and tries the **Web Share API** first (`navigator.share({ files: [...] })`). On iPhone this opens the native share sheet: the user can "Save to Files", AirDrop it, or send it straight to Strava / Komoot / WhatsApp. Falls back to the classic anchor-download on desktop browsers that don't support file sharing.
+- The fallback download also got a small fix: the blob URL is now revoked after a 1 s delay (was immediate), which Safari needs to actually grab the blob.
 
 ## To install
 Replace files at the repo root with everything in this folder. Commit, push, GitHub Pages will serve the new version. Existing PWA installs will pick up the new icons + assets after the next visit (service worker triggers update on registration).

@@ -31,16 +31,42 @@ ${segmentXml}
 </gpx>`;
 }
 
-export function downloadGPX(trackSegments, name, toast) {
-  const gpx = generateGPX(trackSegments, name);
-  const blob = new Blob([gpx], { type: "application/gpx+xml" });
+function downloadViaAnchor(blob, fileName, toast) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${name}.gpx`;
+  link.download = fileName;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  // Revoke a tick later so Safari has time to grab the blob.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
   if (toast) toast("GPX exported");
+}
+
+export async function downloadGPX(trackSegments, name, toast) {
+  const gpx = generateGPX(trackSegments, name);
+  const fileName = `${name}.gpx`;
+  const blob = new Blob([gpx], { type: "application/gpx+xml" });
+
+  // On iOS (and Android), the <a download> trick is unreliable — Safari opens
+  // the XML in a tab instead of saving it. The Web Share API with a File lets
+  // the user "Save to Files", AirDrop it, or open it in Strava/Komoot/etc.
+  if (typeof navigator !== "undefined" && navigator.canShare) {
+    const file = new File([blob], fileName, { type: "application/gpx+xml" });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: name });
+        if (toast) toast("GPX shared");
+        return;
+      } catch (error) {
+        // User cancelled the share sheet, or share failed — fall through to download.
+        if (error && error.name === "AbortError") return;
+      }
+    }
+  }
+
+  downloadViaAnchor(blob, fileName, toast);
 }
 
 export function parseGPX(xmlText) {
