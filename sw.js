@@ -1,4 +1,4 @@
-const CACHE_VERSION = "kr-v10";
+const CACHE_VERSION = "kr-v11";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const TILE_CACHE = `${CACHE_VERSION}-osm-tiles`;
 const TILE_CACHE_LIMIT = 250;
@@ -6,6 +6,7 @@ const TILE_CACHE_LIMIT = 250;
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./replay.html",
   "./styles.css",
   "./app.js",
   "./map.js",
@@ -94,7 +95,19 @@ self.addEventListener("fetch", event => {
   }
 
   if (event.request.mode === "navigate") {
-    event.respondWith(caches.match("./index.html").then(cached => cached || fetch(event.request)));
+    // Serve the cached version of the *requested* page (ignoring the query string,
+    // so replay.html?track=… resolves too). Only fall back to the app shell when
+    // the requested page is neither cached nor reachable. Previously this always
+    // returned index.html, which hijacked the link to replay.html.
+    event.respondWith((async () => {
+      const cached = await caches.match(event.request, { ignoreSearch: true });
+      if (cached) return cached;
+      try {
+        return await fetch(event.request);
+      } catch {
+        return (await caches.match("./index.html")) || Response.error();
+      }
+    })());
     return;
   }
 
