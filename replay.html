@@ -125,6 +125,17 @@ html, body {
   margin-top: 16px;
   text-transform: uppercase;
 }
+.drop-record-link {
+  display: inline-block;
+  margin-top: 20px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.drop-record-link:hover { color: var(--accent); }
 .btn-load {
   display: inline-block;
   padding: 12px 28px;
@@ -893,6 +904,7 @@ html, body {
     <div class="rides-list" id="rides-list" style="display:none;"></div>
     <input type="file" id="file-input" accept=".gpx,.kml" style="display:none;">
     <div class="formats">GPX · KML · no account needed</div>
+    <a class="drop-record-link" href="index.html">← Record a ride</a>
   </div>
 </div>
 

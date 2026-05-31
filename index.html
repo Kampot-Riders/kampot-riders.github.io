@@ -24,6 +24,7 @@
       <span class="version-tag" id="versionTag"></span>
     </div>
     <div class="header-right">
+      <a class="header-replay" href="./replay.html" title="3D ride replay" style="display:inline-flex;align-items:center;gap:5px;font-size:0.7rem;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;text-decoration:none;color:var(--gold);border:1px solid rgba(212,168,67,0.4);padding:4px 10px;border-radius:20px;">▶ Replay</a>
       <span class="wake-icon" id="wakeIcon" title="Screen stays on">☀️</span>
       <div class="header-status idle" id="statusBadge">READY</div>
     </div>
@@ -54,7 +55,8 @@
       </div>
     </div>
 
-    <div class="map-notice hidden" id="mapNotice" role="status" aria-live="polite">
+    <div class="map-notice hidden" id="mapNotice" role="status" aria-live="polite" style="padding-right:32px;">
+      <button class="map-notice-close" id="mapNoticeClose" type="button" aria-label="Dismiss" style="position:absolute;top:6px;right:8px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:var(--text-dim);font-size:14px;line-height:1;cursor:pointer;border-radius:6px;">✕</button>
       <div class="map-notice-text" id="mapNoticeText"></div>
       <button class="map-notice-action hidden" id="mapNoticeAction" type="button"></button>
     </div>

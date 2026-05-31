@@ -73,6 +73,7 @@ const dom = {
   mapNotice: $("mapNotice"),
   mapNoticeText: $("mapNoticeText"),
   mapNoticeAction: $("mapNoticeAction"),
+  mapNoticeClose: $("mapNoticeClose"),
   recoveryDialog: $("recoveryDialog"),
   recoveryStats: $("recoveryStats"),
   discardRecoveryButton: $("discardRecoveryButton"),
@@ -88,6 +89,7 @@ let mapController = null;
 let gpsController = null;
 let recoverySnapshot = null;
 let toastTimer = null;
+let mapNoticeDismissed = false;
 
 function formatTime(ms) {
   const totalSeconds = Math.floor(ms / 1000);
@@ -127,6 +129,10 @@ function toast(message) {
 }
 
 function showMapNotice({ text, actionLabel, actionLayerId }) {
+  // Once the user dismisses the notice it stays dismissed (it would otherwise
+  // reappear on every tile error during a network outage). It only comes back
+  // when the user manually switches base layer — i.e. for a genuinely new case.
+  if (mapNoticeDismissed) return;
   dom.mapNoticeText.textContent = text;
   if (actionLabel && actionLayerId) {
     dom.mapNoticeAction.textContent = actionLabel;
@@ -144,6 +150,12 @@ function hideMapNotice() {
   dom.mapNotice.classList.add("hidden");
   dom.mapNoticeAction.onclick = null;
 }
+
+// Dismiss (✕): hide and suppress further auto-reopens until a layer change.
+dom.mapNoticeClose.onclick = () => {
+  mapNoticeDismissed = true;
+  hideMapNotice();
+};
 
 function dismissSplashOnce() {
   if (state.splashDismissed) return;
@@ -283,7 +295,10 @@ function saveLayerSelection(layerId) {
   state.selectedLayer = layerId;
   saveSelectedLayer(layerId);
   dom.activeLayerLabel.textContent = layerId === "satellite" ? "Satellite" : layerId === "osm" ? "OSM map" : "Cycle map";
-  // Don't hide the notice on selection — for satellite, the notice IS triggered by the selection.
+  // Switching layer is a fresh situation, so allow the notice to appear again
+  // (e.g. the newly-chosen layer may also be unavailable). Hide any stale notice.
+  mapNoticeDismissed = false;
+  hideMapNotice();
   if (state.recording) autosaveRecordingState();
 }
 
