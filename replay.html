@@ -1,0 +1,1985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kampot Riders — Trajectory Replay</title>
+<meta name="description" content="Animate any GPX/KML ride in 3D over satellite imagery — speed, elevation and distance, replayed in cinematic style. By Kampot Riders.">
+<meta name="theme-color" content="#0a0e14">
+
+<!-- Open Graph / social share -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Kampot Riders — Trajectory Replay">
+<meta property="og:description" content="Animate any GPX/KML ride in 3D over satellite imagery. Speed, elevation, distance — replayed in cinematic style.">
+<meta name="twitter:card" content="summary_large_image">
+
+<!-- Inline SVG favicon (no extra file needed) -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Cpath d='M6 22 L13 11 L19 18 L26 8' fill='none' stroke='%235af2ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='26' cy='8' r='2.6' fill='%23fff' stroke='%235af2ff' stroke-width='1.6'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://server.arcgisonline.com">
+<link rel="preconnect" href="https://s3.amazonaws.com">
+
+<!-- MapLibre GL JS -->
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+<style>
+:root {
+  --bg: #0a0e14;
+  --bg-soft: #11161f;
+  --panel: rgba(10, 14, 20, 0.78);
+  --panel-border: rgba(120, 200, 255, 0.18);
+  --accent: #5af2ff;
+  --accent-warm: #ffb86b;
+  --text: #d6e1ee;
+  --text-dim: #6b7a8f;
+  --mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --display: 'Space Grotesk', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--display);
+  overflow: hidden;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+
+/* ───────── Drop zone (when no file loaded) ───────── */
+.drop-zone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(90,242,255,0.05) 0%, rgba(10,14,20,0.85) 60%);
+  z-index: 20;
+  cursor: pointer;
+  transition: opacity 0.4s ease;
+}
+.drop-zone.hidden { opacity: 0; pointer-events: none; }
+.drop-zone.dragover .drop-card {
+  border-color: var(--accent);
+  background: rgba(90, 242, 255, 0.06);
+  transform: scale(1.02);
+}
+.drop-card {
+  border: 1.5px dashed var(--panel-border);
+  border-radius: 18px;
+  padding: 48px 64px;
+  text-align: center;
+  background: var(--panel);
+  backdrop-filter: blur(20px);
+  transition: all 0.3s ease;
+  max-width: 480px;
+}
+.drop-card h1 {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin-bottom: 12px;
+}
+.drop-brand-name {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--accent);
+  line-height: 1.1;
+}
+.drop-brand-tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  text-transform: lowercase;
+  margin-top: 6px;
+}
+.drop-brand-divider {
+  height: 1px;
+  max-width: 220px;
+  margin: 16px auto 18px;
+  background: linear-gradient(90deg, transparent, var(--panel-border), transparent);
+}
+.drop-card h1 .accent { color: var(--accent); }
+.drop-card p {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+.drop-card .formats {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  margin-top: 16px;
+  text-transform: uppercase;
+}
+.btn-load {
+  display: inline-block;
+  padding: 12px 28px;
+  background: var(--accent);
+  color: #0a0e14;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+}
+.btn-load:hover { background: #7df5ff; transform: translateY(-1px); }
+
+.drop-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.btn-demo {
+  display: inline-block;
+  padding: 12px 24px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  font-family: var(--display);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+}
+.btn-demo:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* ───────── Group-rides list (loaded from /tracks) ───────── */
+.rides-list {
+  margin-top: 14px;
+  text-align: left;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.rides-loading, .rides-empty {
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 16px 4px;
+  text-align: center;
+}
+.rides-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.rides-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.rides-back {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-family: var(--display);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.rides-back:hover { color: var(--accent); border-color: var(--accent); }
+.ride-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 11px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--display);
+  font-size: 14px;
+  text-align: left;
+  transition: all 0.18s ease;
+}
+.ride-row:hover { border-color: var(--accent); transform: translateY(-1px); }
+.ride-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ride-go { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+/* ───────── 3D exaggeration slider ───────── */
+.exag-panel {
+  position: absolute;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px 18px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 320px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.exag-label {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.exag-label > span:first-child {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.exag-value {
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 2px;
+}
+.exag-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 4px;
+  background: rgba(120, 200, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.exag-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 12px var(--accent);
+}
+.exag-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 12px var(--accent);
+}
+
+/* ───────── Control panel (bottom) ───────── */
+.controls {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 16px 22px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  z-index: 10;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  min-width: 580px;
+}
+
+.btn-play {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #0a0e14;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.btn-play:hover { background: #7df5ff; }
+.btn-play svg { width: 14px; height: 14px; }
+
+.scrub-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.scrub-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+}
+.scrub {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: rgba(120, 200, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 12px var(--accent);
+}
+.scrub::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 12px var(--accent);
+}
+
+.speed-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.speed-control label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.speed-control select {
+  background: var(--bg-soft);
+  color: var(--accent);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+/* ───────── Charts panel (right side, stacked) ───────── */
+.charts-panel {
+  position: absolute;
+  top: 180px;
+  right: 24px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  z-index: 10;
+  width: 320px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.chart-row + .chart-row { margin-top: 14px; }
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-family: var(--mono);
+}
+.chart-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.chart-stats {
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+.stat-min { color: var(--text-dim); }
+.stat-max { color: var(--text); font-weight: 600; }
+.stat-sep { color: var(--text-dim); opacity: 0.5; margin: 0 4px; }
+.stat-unit { color: var(--text-dim); margin-left: 4px; font-size: 10px; }
+.chart-svg {
+  width: 100%;
+  height: 60px;
+  display: block;
+  cursor: pointer;
+}
+.chart-cursor { opacity: 0.7; }
+.chart-dot { filter: drop-shadow(0 0 6px currentColor); }
+
+/* ───────── Toggle button (follow rider) ───────── */
+.btn-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--panel-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.btn-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.btn-toggle.active {
+  background: var(--accent);
+  color: #0a0e14;
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(90, 242, 255, 0.5);
+}
+.btn-toggle svg { width: 16px; height: 16px; }
+
+.btn-reload {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--panel-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.btn-reload:hover { color: var(--accent); border-color: var(--accent); }
+.btn-reload svg { width: 14px; height: 14px; }
+
+/* ───────── Info panel (bottom left) ───────── */
+.info-panel {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  z-index: 10;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  min-width: 200px;
+}
+.info-panel .label {
+  font-size: 9px;
+  color: var(--text-dim);
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+.info-panel .value {
+  font-size: 16px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+.info-panel .value:last-child { margin-bottom: 0; }
+.info-panel .value-hero {
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  margin-bottom: 12px;
+}
+.info-panel .value-hero .unit { font-size: 13px; }
+.info-panel .unit {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+/* ───────── Ride summary (top left) ───────── */
+.summary-panel {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 12px 16px 14px;
+  z-index: 10;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.summary-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 22px;
+}
+.summary-cell { display: flex; flex-direction: column; }
+.summary-cell .s-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.summary-cell .s-val {
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 2px;
+  line-height: 1;
+}
+.summary-cell .s-unit {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-left: 3px;
+}
+
+/* Hide MapLibre's default controls subtly */
+.maplibregl-ctrl-attrib {
+  background: rgba(10, 14, 20, 0.6) !important;
+  color: var(--text-dim) !important;
+}
+.maplibregl-ctrl-attrib a { color: var(--text-dim) !important; }
+
+.error-toast {
+  position: absolute;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 80, 80, 0.15);
+  border: 1px solid rgba(255, 80, 80, 0.5);
+  color: #ffb0b0;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  z-index: 30;
+  display: none;
+}
+.error-toast.show { display: block; }
+.error-toast.ok {
+  background: rgba(90, 242, 255, 0.12);
+  border-color: rgba(90, 242, 255, 0.5);
+  color: var(--accent);
+}
+
+/* Charts collapse (used on mobile, also toggleable on desktop) */
+.charts-panel.collapsed { display: none !important; }
+
+/* ════════════════ RESPONSIVE — tablet & phone ════════════════ */
+@media (max-width: 820px) {
+  .charts-panel {
+    top: auto;
+    bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+    left: 10px;
+    right: 10px;
+    width: auto;
+    padding: 10px 12px;
+  }
+  .chart-svg { height: 46px; }
+  .charts-panel .chart-row + .chart-row { margin-top: 8px; }
+
+  .controls {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    min-width: 0;
+    width: auto;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-radius: 16px 16px 0 0;
+    bottom: 0;
+  }
+  .scrub-wrap { order: -1; flex-basis: 100%; min-width: 100%; }
+
+  .summary-panel {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: 10px;
+    right: 10px;
+    padding: 7px 12px;
+  }
+  .summary-title { display: none; }
+  .summary-grid { grid-template-columns: repeat(3, 1fr); gap: 5px 8px; }
+  .summary-cell .s-label { font-size: 7.5px; letter-spacing: 0.06em; }
+  .summary-cell .s-val { font-size: 15px; }
+  .summary-cell .s-unit { font-size: 8px; margin-left: 2px; }
+
+  .info-panel {
+    bottom: auto;
+    top: calc(92px + env(safe-area-inset-top, 0px));
+    left: 10px;
+    right: 10px;
+    min-width: 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+  }
+  .info-panel .label { display: none; }
+  .info-panel .value { font-size: 14px; margin: 0; align-self: center; }
+  .info-panel .value-hero { font-size: 22px; }
+  .info-panel .value-hero .unit { font-size: 10px; }
+  .info-panel .value:before {
+    font-size: 8px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 1px;
+  }
+  #info-speed:before { content: "SPD"; }
+  #info-distance:before { content: "DIST"; }
+  #info-elev:before { content: "ELEV"; }
+
+  .exag-panel {
+    bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+    left: 10px;
+    right: 10px;
+    transform: none;
+    min-width: 0;
+    width: auto;
+  }
+  /* When charts are visible, push the exag slider above them */
+  body:not(.charts-collapsed) .exag-panel {
+    bottom: calc(280px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .maplibregl-ctrl-top-right { display: none; }
+}
+
+@media (max-width: 480px) {
+  .drop-card { padding: 32px 26px; max-width: calc(100vw - 28px); }
+  .drop-card h1 { font-size: 23px; }
+  .btn-play { width: 40px; height: 40px; }
+  .btn-toggle, .btn-reload { width: 32px; height: 32px; }
+  .speed-control select { padding: 3px 6px; font-size: 11px; }
+}
+
+/* Larger touch targets on coarse pointers (phones/tablets) */
+@media (pointer: coarse) {
+  .scrub { height: 6px; }
+  .scrub::-webkit-slider-thumb { width: 20px; height: 20px; }
+  .scrub::-moz-range-thumb { width: 20px; height: 20px; }
+  .exag-slider { height: 6px; }
+  .exag-slider::-webkit-slider-thumb { width: 20px; height: 20px; }
+  .exag-slider::-moz-range-thumb { width: 20px; height: 20px; }
+}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Ride summary (top-left) -->
+<div class="summary-panel" id="summary" style="display:none;">
+  <div class="summary-title">Ride summary</div>
+  <div class="summary-grid">
+    <div class="summary-cell">
+      <span class="s-label">Distance</span>
+      <span class="s-val" id="sum-dist">—<span class="s-unit">km</span></span>
+    </div>
+    <div class="summary-cell">
+      <span class="s-label">Duration</span>
+      <span class="s-val" id="sum-dur">—</span>
+    </div>
+    <div class="summary-cell">
+      <span class="s-label">Avg speed</span>
+      <span class="s-val" id="sum-avg">—<span class="s-unit">km/h</span></span>
+    </div>
+    <div class="summary-cell">
+      <span class="s-label">Elev gain</span>
+      <span class="s-val" id="sum-gain">—<span class="s-unit">m</span></span>
+    </div>
+    <div class="summary-cell">
+      <span class="s-label">Moving</span>
+      <span class="s-val" id="sum-move">—</span>
+    </div>
+    <div class="summary-cell">
+      <span class="s-label">Paused</span>
+      <span class="s-val" id="sum-pause">—</span>
+    </div>
+  </div>
+</div>
+
+<!-- Info panel -->
+<div class="info-panel" id="info" style="display:none;">
+  <div class="label">Distance</div>
+  <div class="value value-hero" id="info-distance">0.0<span class="unit">km</span></div>
+  <div class="label">Speed</div>
+  <div class="value" id="info-speed">0.0<span class="unit">km/h</span></div>
+  <div class="label">Elevation</div>
+  <div class="value" id="info-elev">—<span class="unit">m</span></div>
+</div>
+
+<!-- Charts panel: speed + elevation curves -->
+<div class="charts-panel" id="charts" style="display:none;">
+  <div class="chart-row">
+    <div class="chart-header">
+      <span class="chart-title">Speed</span>
+      <span class="chart-stats">
+        <span class="stat-min" id="speed-min">—</span>
+        <span class="stat-sep">/</span>
+        <span class="stat-max" id="speed-max">—</span>
+        <span class="stat-unit">km/h</span>
+      </span>
+    </div>
+    <svg class="chart-svg" id="speed-chart" viewBox="0 0 600 60" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="speed-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#5af2ff" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="#5af2ff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path class="chart-fill" id="speed-fill" fill="url(#speed-grad)"/>
+      <path class="chart-line" id="speed-line" fill="none" stroke="#5af2ff" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
+      <line class="chart-cursor" id="speed-cursor" x1="0" y1="0" x2="0" y2="60" stroke="#ffffff" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <circle class="chart-dot" id="speed-dot" r="3" fill="#5af2ff" stroke="#fff" stroke-width="1.2"/>
+    </svg>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-header">
+      <span class="chart-title">Elevation</span>
+      <span class="chart-stats">
+        <span class="stat-min" id="ele-min">—</span>
+        <span class="stat-sep">/</span>
+        <span class="stat-max" id="ele-max">—</span>
+        <span class="stat-unit">m</span>
+      </span>
+    </div>
+    <svg class="chart-svg" id="ele-chart" viewBox="0 0 600 60" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="ele-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffb86b" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="#ffb86b" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path class="chart-fill" id="ele-fill" fill="url(#ele-grad)"/>
+      <path class="chart-line" id="ele-line" fill="none" stroke="#ffb86b" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
+      <line class="chart-cursor" id="ele-cursor" x1="0" y1="0" x2="0" y2="60" stroke="#ffffff" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <circle class="chart-dot" id="ele-dot" r="3" fill="#ffb86b" stroke="#fff" stroke-width="1.2"/>
+    </svg>
+  </div>
+</div>
+
+<!-- Bottom controls -->
+<div class="controls" id="controls" style="display:none;">
+  <button class="btn-play" id="btn-play" title="Play/Pause">
+    <svg id="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+  </button>
+  <div class="scrub-wrap">
+    <input type="range" min="0" max="1000" value="0" class="scrub" id="scrub">
+    <div class="scrub-labels">
+      <span id="scrub-start">--:--:--</span>
+      <span id="scrub-current">--:--:--</span>
+      <span id="scrub-end">--:--:--</span>
+    </div>
+  </div>
+  <div class="speed-control">
+    <label>Speed</label>
+    <select id="speed">
+      <option value="1">1x</option>
+      <option value="5">5x</option>
+      <option value="10">10x</option>
+      <option value="25">25x</option>
+      <option value="50">50x</option>
+      <option value="100" selected>100x</option>
+      <option value="250">250x</option>
+      <option value="500">500x</option>
+    </select>
+  </div>
+  <button class="btn-toggle" id="btn-follow" title="Follow rider (auto-center)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+    </svg>
+  </button>
+  <button class="btn-toggle active" id="btn-3d" title="Toggle 3D terrain">
+    <span style="font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.04em;">3D</span>
+  </button>
+  <button class="btn-toggle" id="btn-charts" title="Show/hide charts">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/>
+    </svg>
+  </button>
+  <button class="btn-reload" id="btn-reload" title="Load another file">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M14 5l7 7-7 7M3 12h18"/>
+    </svg>
+  </button>
+  <button class="btn-reload" id="btn-share" title="Copy a shareable link">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+      <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Floating exaggeration slider (visible only in 3D mode) -->
+<div class="exag-panel" id="exag-panel" style="display:none;">
+  <div class="exag-label">
+    <span>Vertical exaggeration</span>
+    <span class="exag-value" id="exag-value">1.5×</span>
+  </div>
+  <input type="range" min="1" max="30" value="15" class="exag-slider" id="exag-slider">
+</div>
+
+
+<!-- Drop zone -->
+<div class="drop-zone" id="drop">
+  <div class="drop-card">
+    <div class="drop-brand">
+      <div class="drop-brand-name">Kampot Riders</div>
+      <div class="drop-brand-tag">ride · explore · share</div>
+    </div>
+    <div class="drop-brand-divider"></div>
+    <h1>Trajectory <span class="accent">Replay</span></h1>
+    <p>Drop a ride file here to animate your route in 3D over satellite imagery of Kampot — or anywhere on Earth.</p>
+    <div class="drop-actions" id="drop-actions">
+      <button class="btn-load" id="btn-load">Choose file</button>
+      <button class="btn-demo" id="btn-rides">Choose group rides</button>
+    </div>
+    <div class="rides-list" id="rides-list" style="display:none;"></div>
+    <input type="file" id="file-input" accept=".gpx,.kml" style="display:none;">
+    <div class="formats">GPX · KML · no account needed</div>
+  </div>
+</div>
+
+<div class="error-toast" id="error"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   KAMPOT RIDERS — TRAJECTORY REPLAY POC
+   Single-file MapLibre 2D animation, GPX/KML support, Esri satellite
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ─── Esri World Imagery as a raster basemap (no API key required) ───
+const ESRI_STYLE = {
+  version: 8,
+  sources: {
+    'esri-satellite': {
+      type: 'raster',
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+    }
+  },
+  layers: [{
+    id: 'satellite',
+    type: 'raster',
+    source: 'esri-satellite'
+  }]
+};
+
+// ─── Map init centered on Kampot, 3D by default ───
+const map = new maplibregl.Map({
+  container: 'map',
+  style: ESRI_STYLE,
+  center: [104.181, 10.610],   // Kampot, Cambodia
+  zoom: 13,
+  maxZoom: 18,                  // Esri tiles run out beyond 18-19; cap to avoid "no data"
+  minZoom: 3,
+  maxPitch: 85,                 // allow full 3D camera tilt
+  pitch: 60,                    // start with a nice cinematic angle
+  bearing: 0,
+  attributionControl: { compact: true }
+});
+
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+/* ─────────── 3D terrain (AWS open Terrarium DEM — no API key) ───────────
+   Uses the free, open AWS Elevation Tiles (Terrarium RGB encoding). No key,
+   no account, no per-visitor setup — works the moment the page is online.   */
+const DEM_TILES = ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'];
+const DEM_ENCODING = 'terrarium';
+const DEM_MAXZOOM = 15;   // AWS terrarium tiles top out around z15
+
+let is3D = true;
+let exaggeration = 1.5;
+let terrainEnabled = false;   // becomes true once DEM source is added
+
+function setupTerrain() {
+  if (terrainEnabled) return true;
+
+  try {
+    // Two separate raster-dem sources: one for hillshade (visual), one for 3D
+    // terrain. MapLibre tunes them differently, so it warns if they're shared.
+    if (!map.getSource('hillshade-dem')) {
+      map.addSource('hillshade-dem', {
+        type: 'raster-dem',
+        tiles: DEM_TILES,
+        encoding: DEM_ENCODING,
+        tileSize: 256,
+        maxzoom: DEM_MAXZOOM,
+        attribution: 'Elevation © <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Tilezen / AWS Terrain Tiles</a>'
+      });
+    }
+    if (!map.getSource('terrain-dem')) {
+      map.addSource('terrain-dem', {
+        type: 'raster-dem',
+        tiles: DEM_TILES,
+        encoding: DEM_ENCODING,
+        tileSize: 256,
+        maxzoom: DEM_MAXZOOM
+      });
+    }
+
+    // Hillshade layer (subtle, on top of satellite so shadows are visible)
+    if (!map.getLayer('hillshade')) {
+      map.addLayer({
+        id: 'hillshade',
+        type: 'hillshade',
+        source: 'hillshade-dem',
+        paint: {
+          'hillshade-exaggeration': 0.45,
+          'hillshade-shadow-color': '#000814',
+          'hillshade-highlight-color': '#ffffff',
+          'hillshade-accent-color': '#1a2030'
+        }
+      });
+    }
+
+    // Activate 3D terrain
+    map.setTerrain({ source: 'terrain-dem', exaggeration: exaggeration });
+
+    // Make sure the trace layers stay on top (above hillshade)
+    ['route-bg-line', 'trail-glow', 'trail', 'rider-glow', 'rider'].forEach(id => {
+      if (map.getLayer(id)) map.moveLayer(id);
+    });
+
+    terrainEnabled = true;
+    console.log('[replay] 3D terrain enabled (AWS Terrarium), exaggeration', exaggeration);
+    return true;
+  } catch (err) {
+    console.error('[replay] Terrain setup failed:', err);
+    showError('Terrain failed: ' + err.message);
+    return false;
+  }
+}
+
+function set3DMode(on) {
+  is3D = on;
+  document.getElementById('btn-3d').classList.toggle('active', on);
+  document.getElementById('exag-panel').style.display = on ? 'flex' : 'none';
+
+  if (on) {
+    setupTerrain();
+    if (map.getLayer('hillshade')) map.setLayoutProperty('hillshade', 'visibility', 'visible');
+    // Delay the animation slightly so terrain setup tasks complete first
+    setTimeout(() => map.easeTo({ pitch: 60, duration: 800 }), 50);
+  } else {
+    if (map.getTerrain()) map.setTerrain(null);
+    if (map.getLayer('hillshade')) map.setLayoutProperty('hillshade', 'visibility', 'none');
+    setTimeout(() => map.easeTo({ pitch: 0, bearing: 0, duration: 800 }), 50);
+  }
+}
+
+function setExaggeration(v) {
+  exaggeration = v;
+  document.getElementById('exag-value').textContent = v.toFixed(1) + '×';
+  if (terrainEnabled && is3D) {
+    map.setTerrain({ source: 'terrain-dem', exaggeration: v });
+  }
+}
+
+// Wire up controls
+document.getElementById('btn-3d').onclick = () => set3DMode(!is3D);
+document.getElementById('exag-slider').oninput = (e) => {
+  setExaggeration(parseFloat(e.target.value) / 10);
+};
+
+/* ─────────── State ─────────── */
+let track = null;              // { points: [{lon, lat, time, ele}], totalDist, startTime, endTime, duration }
+let isPlaying = false;
+let speedMul = 100;
+let progress = 0;              // 0..1 along time axis
+let rafId = null;
+let lastFrameTime = 0;
+let followRider = false;       // when true, the map pans to keep the rider centered
+let followBearing = null;      // smoothed heading-up bearing (null = snap on next frame)
+let lastHeading = 0;           // most recent travel direction (deg), updated every frame
+let lastDistForCam = 0;        // cumulative distance at the previous frame (for distance-based smoothing)
+// Camera heading is smoothed over DISTANCE travelled, not frames — so it's
+// independent of playback speed and framerate. SMOOTH_DIST_KM is the characteristic
+// distance over which the camera eases toward the local heading: bigger = smoother,
+// turns are absorbed over several km. ~63% of a turn is taken in after SMOOTH_DIST_KM,
+// ~95% after 3×. 1.4 km gives a very gentle, cinematic rotation.
+const SMOOTH_DIST_KM = 1.4;
+const HEADING_LOOK_KM = 0.120; // ±120 m window for a stable local travel direction
+
+/* ─────────── File loading ─────────── */
+const dropZone = document.getElementById('drop');
+const fileInput = document.getElementById('file-input');
+let loadedTrackUrl = null;   // set when a track came from ?track=
+let isDemo = false;          // set when the bundled demo ride is loaded
+
+document.getElementById('btn-load').onclick = () => fileInput.click();
+document.getElementById('btn-rides').onclick = () => openRidesList();
+document.getElementById('btn-reload').onclick = () => {
+  pauseAnim();
+  // reset the start screen back to its two buttons
+  document.getElementById('rides-list').style.display = 'none';
+  document.getElementById('rides-list').innerHTML = '';
+  document.getElementById('drop-actions').style.display = 'flex';
+  dropZone.classList.remove('hidden');
+};
+
+/* ─────────── Group rides (auto-listed from the repo's /tracks folder) ─────────── */
+// The folder is read live via the GitHub contents API, so dropping a .gpx into
+// tracks/ makes it appear here with no manifest to maintain. Owner/repo are fixed
+// constants so this keeps working under a custom domain too.
+const GH_OWNER = 'kampot-riders';
+const GH_REPO  = 'kampot-riders.github.io';
+const TRACKS_DIR = 'tracks';
+
+function escHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function prettyRideName(fn) {
+  return fn.replace(/\.(gpx|kml)$/i, '').replace(/_+/g, ' ').trim();
+}
+
+async function openRidesList() {
+  const box = document.getElementById('rides-list');
+  const actions = document.getElementById('drop-actions');
+  actions.style.display = 'none';
+  box.style.display = 'block';
+  box.innerHTML = '<div class="rides-loading">Loading group rides…</div>';
+  try {
+    const api = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${TRACKS_DIR}`;
+    const res = await fetch(api, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const items = await res.json();
+    const rides = (Array.isArray(items) ? items : [])
+      .filter(it => it.type === 'file' && /\.(gpx|kml)$/i.test(it.name))
+      .sort((a, b) => b.name.localeCompare(a.name));  // dated names → newest first
+    renderRides(rides);
+  } catch (err) {
+    backToActions();
+    showError('Could not list group rides: ' + err.message);
+  }
+}
+
+function backToActions() {
+  const box = document.getElementById('rides-list');
+  box.style.display = 'none';
+  box.innerHTML = '';
+  document.getElementById('drop-actions').style.display = 'flex';
+}
+
+function renderRides(rides) {
+  const box = document.getElementById('rides-list');
+  const head = `<div class="rides-head"><button class="rides-back" id="rides-back">← Back</button><span class="rides-title">Group rides</span></div>`;
+  if (!rides.length) {
+    box.innerHTML = head + '<div class="rides-empty">No rides found in /tracks yet.</div>';
+  } else {
+    const rows = rides.map(r =>
+      `<button class="ride-row" data-path="${escHtml(r.path)}">` +
+        `<span class="ride-name">${escHtml(prettyRideName(r.name))}</span>` +
+        `<span class="ride-go">→</span></button>`).join('');
+    box.innerHTML = head + rows;
+  }
+  document.getElementById('rides-back').onclick = backToActions;
+  box.querySelectorAll('.ride-row').forEach(btn => {
+    btn.onclick = () => loadFromUrl(encodeURI(btn.dataset.path));
+  });
+}
+
+fileInput.onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); };
+
+// Drag & drop
+['dragenter', 'dragover'].forEach(ev => {
+  dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+});
+['dragleave', 'drop'].forEach(ev => {
+  dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+});
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+
+// Parse raw text → track → render. ext is 'gpx' or 'kml'.
+function ingest(text, ext) {
+  let points = [];
+  if (ext === 'gpx') points = parseGPX(text);
+  else if (ext === 'kml') points = parseKML(text);
+  else throw new Error('Unsupported format. Use GPX or KML.');
+  if (points.length < 2) throw new Error('Track has fewer than 2 points.');
+  track = buildTrack(points);
+  onTrackLoaded();
+}
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      isDemo = false; loadedTrackUrl = null;
+      const ext = file.name.toLowerCase().split('.').pop();
+      ingest(ev.target.result, ext);
+    } catch (err) {
+      showError(err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Load a GPX/KML from a URL (used by ?track= deep links; same-origin repo files
+// have no CORS issue — host your tracks next to this page on GitHub Pages).
+async function loadFromUrl(url) {
+  try {
+    showToast('Loading ride…', true);
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+    const m = url.toLowerCase().match(/\.(gpx|kml)(?:[?#]|$)/);
+    const ext = m ? m[1] : 'gpx';
+    isDemo = false; loadedTrackUrl = url;
+    ingest(text, ext);
+  } catch (err) {
+    showError('Could not load ride from link: ' + err.message);
+  }
+}
+
+/* ─────────── Demo ride (bundled — a synthetic ~9 km Kampot loop) ─────────── */
+function makeDemoTrack() {
+  // [lon, lat, ele(m)] waypoints: riverside → climb toward the Bokor foothills → back
+  const wp = [
+    [104.1790, 10.5995,   6], [104.1730, 10.6080,   8], [104.1660, 10.6180,  14],
+    [104.1600, 10.6300,  30], [104.1560, 10.6420,  70], [104.1540, 10.6520, 120],
+    [104.1620, 10.6560,  90], [104.1720, 10.6520,  45], [104.1820, 10.6420,  18],
+    [104.1880, 10.6280,  10], [104.1860, 10.6130,   7], [104.1810, 10.6020,   6],
+    [104.1790, 10.5995,   6]
+  ];
+  const pts = [];
+  let t = Date.now() - 45 * 60 * 1000;   // "rode it 45 min ago"
+  for (let i = 0; i < wp.length - 1; i++) {
+    const [lo1, la1, e1] = wp[i], [lo2, la2, e2] = wp[i + 1];
+    const segKm = haversine(la1, lo1, la2, lo2);
+    const kmh = (e2 > e1 + 5) ? 9 : (e2 < e1 - 5 ? 26 : 19);  // slow uphill, quick down
+    const n = Math.max(2, Math.round((segKm / kmh) * 3600));  // ~1 sample/second
+    for (let k = 0; k < n; k++) {
+      const f = k / n;
+      pts.push({ lon: lo1 + (lo2 - lo1) * f, lat: la1 + (la2 - la1) * f, ele: e1 + (e2 - e1) * f, time: t });
+      t += 1000;
+    }
+  }
+  const last = wp[wp.length - 1];
+  pts.push({ lon: last[0], lat: last[1], ele: last[2], time: t });
+  return pts;
+}
+
+function loadDemo() {
+  try {
+    isDemo = true; loadedTrackUrl = null;
+    track = buildTrack(makeDemoTrack());
+    onTrackLoaded();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+/* ─────────── Shareable link ─────────── */
+document.getElementById('btn-share').onclick = () => shareLink();
+
+function shareLink() {
+  const base = location.origin + location.pathname;
+  let url;
+  if (isDemo) {
+    url = base + '?demo';
+  } else if (loadedTrackUrl) {
+    const abs = new URL(loadedTrackUrl, base).href;   // resolve relative repo paths
+    url = base + '?track=' + encodeURIComponent(abs);
+  } else {
+    showError('This ride is a local file. Host the GPX online (e.g. in your repo) and open it via a link to make it shareable.');
+    return;
+  }
+  copyText(url)
+    .then(() => showToast('Shareable link copied ✓', true))
+    .catch(() => showToast(url, true));
+}
+
+function copyText(t) {
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t);
+  return new Promise((resolve, reject) => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); resolve();
+    } catch (e) { reject(e); }
+  });
+}
+
+/* ─────────── Charts show/hide (collapsed by default on small screens) ─────────── */
+const chartsPanel = document.getElementById('charts');
+const btnCharts = document.getElementById('btn-charts');
+function setChartsVisible(on) {
+  chartsPanel.classList.toggle('collapsed', !on);
+  btnCharts.classList.toggle('active', on);
+  document.body.classList.toggle('charts-collapsed', !on);
+}
+btnCharts.onclick = () => setChartsVisible(chartsPanel.classList.contains('collapsed'));
+// Default: visible on desktop, collapsed on phones/tablets to keep the map clear
+setChartsVisible(!window.matchMedia('(max-width: 820px)').matches);
+
+function showError(msg) { showToast(msg, false); }
+
+function showToast(msg, ok) {
+  const e = document.getElementById('error');
+  e.textContent = msg;
+  e.classList.toggle('ok', !!ok);
+  e.classList.add('show');
+  clearTimeout(e._t);
+  e._t = setTimeout(() => { e.classList.remove('show'); e.classList.remove('ok'); }, ok ? 2600 : 4500);
+}
+
+/* ─────────── GPX parser ─────────── */
+function parseGPX(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  // Check for parse errors
+  const parseErr = doc.querySelector('parsererror');
+  if (parseErr) throw new Error('Invalid GPX XML: ' + parseErr.textContent.slice(0, 120));
+
+  // Use namespace-agnostic lookup (GPX files use http://www.topografix.com/GPX/1/1)
+  const trkpts = [...doc.getElementsByTagNameNS('*', 'trkpt')];
+  const rtepts = [...doc.getElementsByTagNameNS('*', 'rtept')];
+  const wpts   = trkpts.length || rtepts.length ? [] : [...doc.getElementsByTagNameNS('*', 'wpt')];
+  const pts = [...trkpts, ...rtepts, ...wpts];
+
+  return pts.map(p => {
+    const lat = parseFloat(p.getAttribute('lat'));
+    const lon = parseFloat(p.getAttribute('lon'));
+    const eleEl = p.getElementsByTagNameNS('*', 'ele')[0];
+    const timeEl = p.getElementsByTagNameNS('*', 'time')[0];
+    return {
+      lon, lat,
+      ele: eleEl ? parseFloat(eleEl.textContent) : null,
+      time: timeEl ? new Date(timeEl.textContent).getTime() : null
+    };
+  }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+}
+
+/* ─────────── KML parser ─────────── */
+function parseKML(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const points = [];
+
+  // gx:Track (Google Earth recorded tracks) — preferred when present
+  const gxTracks = doc.getElementsByTagNameNS('*', 'Track');
+  for (const tr of gxTracks) {
+    const whens = [...tr.getElementsByTagNameNS('*', 'when')];
+    const coords = [...tr.getElementsByTagNameNS('*', 'coord')];
+    for (let i = 0; i < Math.min(whens.length, coords.length); i++) {
+      const [lon, lat, ele] = coords[i].textContent.trim().split(/\s+/).map(parseFloat);
+      points.push({ lon, lat, ele: isNaN(ele) ? null : ele, time: new Date(whens[i].textContent).getTime() });
+    }
+  }
+  if (points.length) return points;
+
+  // LineString fallback (no timestamps)
+  const lineStrings = doc.querySelectorAll('LineString coordinates');
+  for (const ls of lineStrings) {
+    const raw = ls.textContent.trim().split(/\s+/);
+    for (const c of raw) {
+      const [lon, lat, ele] = c.split(',').map(parseFloat);
+      if (!isNaN(lon) && !isNaN(lat)) points.push({ lon, lat, ele: isNaN(ele) ? null : ele, time: null });
+    }
+  }
+  return points;
+}
+
+/* ─────────── Build track (compute timestamps + cumulative dist) ─────────── */
+function buildTrack(points) {
+  // If no timestamps present, synthesize them (uniform spacing, 1 hour total)
+  const hasTime = points.some(p => p.time !== null);
+  if (!hasTime) {
+    const t0 = Date.now();
+    points.forEach((p, i) => { p.time = t0 + (i / (points.length - 1)) * 3600 * 1000; });
+  } else {
+    // Fill any gaps by linear interp on index
+    let lastT = points.find(p => p.time !== null).time;
+    points.forEach(p => { if (p.time === null) p.time = lastT; else lastT = p.time; });
+  }
+
+  // Cumulative distance (haversine, in km)
+  let totalDist = 0;
+  points[0].cumDist = 0;
+  for (let i = 1; i < points.length; i++) {
+    const d = haversine(points[i-1].lat, points[i-1].lon, points[i].lat, points[i].lon);
+    totalDist += d;
+    points[i].cumDist = totalDist;
+  }
+
+  // Smoothed speed using a 50 m spatial moving-average window.
+  // For each point, walk backward and forward until ~25 m on each side
+  // (or until track edges), then speed = window_distance / window_time.
+  // This kills the 1 Hz GPS noise that makes raw point-to-point speeds useless.
+  const WINDOW_M = 50;
+  const HALF_M = WINDOW_M / 2;
+  const HALF_KM = HALF_M / 1000;
+  for (let i = 0; i < points.length; i++) {
+    // Walk back
+    let lo = i;
+    while (lo > 0 && (points[i].cumDist - points[lo-1].cumDist) < HALF_KM) lo--;
+    // Walk forward
+    let hi = i;
+    while (hi < points.length - 1 && (points[hi+1].cumDist - points[i].cumDist) < HALF_KM) hi++;
+
+    const dKm = points[hi].cumDist - points[lo].cumDist;
+    const dtS = (points[hi].time - points[lo].time) / 1000;
+    points[i].speed = (dtS > 0 && dKm > 0) ? (dKm / dtS) * 3600 : 0; // km/h
+  }
+
+  // Smoothed elevation: 100 m spatial window arithmetic mean.
+  // GPS/barometric altitude is noisy at 1 Hz; smoothing keeps the curve readable.
+  const ELE_WINDOW_KM = 0.050; // ±50 m → 100 m window
+  for (let i = 0; i < points.length; i++) {
+    let lo = i;
+    while (lo > 0 && (points[i].cumDist - points[lo-1].cumDist) < ELE_WINDOW_KM) lo--;
+    let hi = i;
+    while (hi < points.length - 1 && (points[hi+1].cumDist - points[i].cumDist) < ELE_WINDOW_KM) hi++;
+    let sum = 0, n = 0;
+    for (let k = lo; k <= hi; k++) {
+      if (points[k].ele !== null && !isNaN(points[k].ele)) { sum += points[k].ele; n++; }
+    }
+    points[i].eleSmooth = n > 0 ? sum / n : null;
+  }
+
+  // Scan global min/max for speed and elevation (for chart axes)
+  let sMin = Infinity, sMax = -Infinity, eMin = Infinity, eMax = -Infinity;
+  for (const p of points) {
+    if (p.speed < sMin) sMin = p.speed;
+    if (p.speed > sMax) sMax = p.speed;
+    if (p.eleSmooth !== null) {
+      if (p.eleSmooth < eMin) eMin = p.eleSmooth;
+      if (p.eleSmooth > eMax) eMax = p.eleSmooth;
+    }
+  }
+  if (eMin === Infinity) { eMin = 0; eMax = 0; }
+
+  return {
+    points,
+    totalDist,
+    startTime: points[0].time,
+    endTime: points[points.length-1].time,
+    duration: points[points.length-1].time - points[0].time,
+    speedMin: sMin, speedMax: sMax,
+    eleMin: eMin, eleMax: eMax
+  };
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371; // km
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* ─────────── Map setup once track loaded ─────────── */
+function onTrackLoaded() {
+  console.log(`[replay] Track loaded: ${track.points.length} points, duration ${(track.duration/1000/60).toFixed(1)} min, distance ${track.totalDist.toFixed(2)} km`);
+  dropZone.classList.add('hidden');
+  document.getElementById('controls').style.display = 'flex';
+  document.getElementById('summary').style.display = 'block';
+  document.getElementById('info').style.display = 'block';
+  document.getElementById('charts').style.display = 'block';
+
+  // 3D terrain is always available now (no key needed)
+  if (is3D) {
+    document.getElementById('btn-3d').classList.add('active');
+    document.getElementById('exag-panel').style.display = 'flex';
+  }
+
+  // Build the ride summary (top-left) and the two SVG curves
+  buildSummary();
+  buildCharts();
+
+  // Compute bounds from the track
+  const lons = track.points.map(p => p.lon);
+  const lats = track.points.map(p => p.lat);
+  const bounds = [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+
+  // Strategy: do everything WITHOUT animations first to avoid TaskQueue reentrancy.
+  // Then trigger one single easeTo at the end for the cinematic intro.
+  const startReplay = () => {
+    // 1) Snap camera flat to the bounds (instant, no animation, no task queue conflict)
+    map.jumpTo({ pitch: 0, bearing: 0 });
+    const cam = map.cameraForBounds(bounds, { padding: 120 });
+    if (cam) map.jumpTo(cam);
+
+    // 2) Set up layers (sources for trace + rider)
+    setupLayers();
+
+    // 3) Set up terrain if 3D requested
+    if (is3D) {
+      setupTerrain();
+    }
+
+    // 4) After everything is in place, animate to the desired pitch in one go
+    if (is3D) {
+      setTimeout(() => map.easeTo({ pitch: 60, duration: 1200 }), 100);
+    }
+  };
+
+  // Wait until style is loaded
+  if (map.isStyleLoaded()) {
+    startReplay();
+  } else {
+    console.log('[replay] Waiting for style load…');
+    map.once('load', startReplay);
+  }
+}
+
+function setupLayers() {
+  console.log('[replay] setupLayers() starting…');
+  try {
+    // Remove previous layers if reloading
+    ['trail-glow', 'trail', 'rider-glow', 'rider', 'route-bg-line'].forEach(id => {
+      if (map.getLayer(id)) map.removeLayer(id);
+    });
+    ['trail-src', 'rider-src', 'route-bg'].forEach(id => {
+      if (map.getSource(id)) map.removeSource(id);
+    });
+
+  // Faint full-route line (so user sees the whole route)
+  const fullCoords = track.points.map(p => [p.lon, p.lat]);
+  map.addSource('route-bg', {
+    type: 'geojson',
+    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: fullCoords } }
+  });
+  map.addLayer({
+    id: 'route-bg-line',
+    type: 'line',
+    source: 'route-bg',
+    paint: {
+      'line-color': '#5af2ff',
+      'line-width': 1.5,
+      'line-opacity': 0.18,
+      'line-dasharray': [2, 2]
+    }
+  });
+
+  // Active trail (grows as we play)
+  map.addSource('trail-src', {
+    type: 'geojson',
+    data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+  });
+  // Outer glow
+  map.addLayer({
+    id: 'trail-glow',
+    type: 'line',
+    source: 'trail-src',
+    paint: {
+      'line-color': '#5af2ff',
+      'line-width': 14,
+      'line-opacity': 0.18,
+      'line-blur': 6
+    }
+  });
+  // Core line
+  map.addLayer({
+    id: 'trail',
+    type: 'line',
+    source: 'trail-src',
+    paint: {
+      'line-color': '#aef6ff',
+      'line-width': 3.5,
+      'line-opacity': 0.95
+    }
+  });
+
+  // Rider marker (circle with glow)
+  map.addSource('rider-src', {
+    type: 'geojson',
+    data: { type: 'Feature', geometry: { type: 'Point', coordinates: [track.points[0].lon, track.points[0].lat] } }
+  });
+  map.addLayer({
+    id: 'rider-glow',
+    type: 'circle',
+    source: 'rider-src',
+    paint: {
+      'circle-radius': 18,
+      'circle-color': '#5af2ff',
+      'circle-opacity': 0.25,
+      'circle-blur': 1
+    }
+  });
+  map.addLayer({
+    id: 'rider',
+    type: 'circle',
+    source: 'rider-src',
+    paint: {
+      'circle-radius': 6,
+      'circle-color': '#ffffff',
+      'circle-stroke-color': '#5af2ff',
+      'circle-stroke-width': 2.5
+    }
+  });
+
+  // Init HUD timestamps
+  const startD = new Date(track.startTime);
+  const endD = new Date(track.endTime);
+  document.getElementById('scrub-start').textContent = fmtTime(startD);
+  document.getElementById('scrub-end').textContent = fmtTime(endD);
+
+  progress = 0;
+  updateFrame(0);
+
+  console.log('[replay] Layers ready, sources:', !!map.getSource('trail-src'), !!map.getSource('rider-src'));
+
+  // Auto-start play
+  playAnim();
+
+  } catch (err) {
+    console.error('[replay] setupLayers FAILED:', err);
+    showError('Layer setup failed: ' + err.message);
+  }
+}
+
+/* ─────────── Ride summary (totals, computed once at load) ─────────── */
+function fmtDuration(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(sec).padStart(2, '0')}s`;
+  return `${sec}s`;
+}
+
+/* Elevation-gain tuning. GPS altitude is noisy (often several metres), so a naive
+   sum of positive steps massively over-counts D+ on flat terrain. We therefore:
+     1) smooth elevation over a WIDE window (decoupled from the chart's eleSmooth), and
+     2) only count a climb once it rises past GAIN_THRESHOLD_M from a moving reference
+        (hysteresis) — so sub-threshold GPS wobble is ignored.
+   Raise the threshold / window if D+ still looks inflated; lower them on hilly rides
+   with real short climbs. The proper fix (DEM-sampled elevation) needs the whole
+   route's terrain tiles loaded, which isn't available at load time, so this is the
+   pragmatic GPS-only estimate. */
+const GAIN_SMOOTH_KM = 0.150;   // ±150 m moving-average window, just for D+
+const GAIN_THRESHOLD_M = 3;     // hysteresis threshold in metres
+
+function elevationGain() {
+  const pts = track.points, N = pts.length;
+  let gain = 0, ref = null;
+  for (let i = 0; i < N; i++) {
+    // Distance window ±GAIN_SMOOTH_KM around point i
+    let lo = i;
+    while (lo > 0 && (pts[i].cumDist - pts[lo - 1].cumDist) < GAIN_SMOOTH_KM) lo--;
+    let hi = i;
+    while (hi < N - 1 && (pts[hi + 1].cumDist - pts[i].cumDist) < GAIN_SMOOTH_KM) hi++;
+    let sum = 0, n = 0;
+    for (let k = lo; k <= hi; k++) {
+      const e = pts[k].ele;
+      if (e !== null && !isNaN(e)) { sum += e; n++; }
+    }
+    if (n <= 0) continue;
+    const e = sum / n;                          // wide moving-average elevation
+    if (ref === null) { ref = e; continue; }
+    if (e > ref + GAIN_THRESHOLD_M) { gain += e - ref; ref = e; }   // counted climb
+    else if (e < ref - GAIN_THRESHOLD_M) { ref = e; }              // descent: reset reference
+  }
+  return gain;
+}
+
+/* Moving vs paused time. A segment counts as "moving" when its smoothed speed is at
+   least MOVING_SPEED_KMH; everything slower is treated as a stop. Average speed is then
+   distance ÷ moving time (the "moving average" cycling computers show), and paused time
+   is elapsed − moving. 3 km/h is below a slow coast, so brief stops at lights/junctions
+   and the gaps between track segments are correctly counted as pauses. */
+const MOVING_SPEED_KMH = 3.0;
+
+function movingStats() {
+  const pts = track.points, N = pts.length;
+  let moving = 0;
+  for (let i = 0; i < N - 1; i++) {
+    const seg = pts[i + 1].time - pts[i].time;
+    if (seg <= 0) continue;
+    const spd = (pts[i].speed + pts[i + 1].speed) / 2;
+    if (spd >= MOVING_SPEED_KMH) moving += seg;
+  }
+  const paused = Math.max(0, track.duration - moving);
+  const movHours = moving / 3600000;
+  const avg = movHours > 0 ? track.totalDist / movHours : 0;
+  return { moving, paused, avg };
+}
+
+function buildSummary() {
+  const gain = elevationGain();
+  const { moving, paused, avg } = movingStats();
+
+  const set = (id, val, unit) => {
+    document.getElementById(id).innerHTML =
+      val + (unit ? `<span class="s-unit">${unit}</span>` : '');
+  };
+  set('sum-dist', track.totalDist.toFixed(1), 'km');
+  document.getElementById('sum-dur').textContent = fmtDuration(track.duration);
+  set('sum-avg', avg.toFixed(1), 'km/h');
+  set('sum-gain', Math.round(gain).toString(), 'm');
+  document.getElementById('sum-move').textContent = fmtDuration(moving);
+  document.getElementById('sum-pause').textContent = fmtDuration(paused);
+
+  document.getElementById('sum-avg').parentElement.title =
+    'Moving average — distance divided by moving time (stops excluded).';
+  document.getElementById('sum-gain').parentElement.title =
+    'Elevation gain estimated from GPS altitude (smoothed, noise-filtered) — approximate.';
+}
+
+/* ─────────── Charts (SVG, drawn once at load) ─────────── */
+const CHART_W = 600, CHART_H = 60, PAD_Y = 4;
+let speedXOfTime = null, eleXOfTime = null; // helpers to convert time → SVG x
+
+function buildCharts() {
+  const pts = track.points;
+  const t0 = track.startTime;
+  const dur = track.duration || 1;
+
+  // Stats labels
+  document.getElementById('speed-min').textContent = track.speedMin.toFixed(1);
+  document.getElementById('speed-max').textContent = track.speedMax.toFixed(1);
+  document.getElementById('ele-min').textContent = track.eleMin.toFixed(0);
+  document.getElementById('ele-max').textContent = track.eleMax.toFixed(0);
+
+  // Helper: build a smooth path + filled area for a series of (time, value).
+  // To keep the SVG light when pts is large (10k+), downsample to ~600 columns max.
+  function buildSeries(getValue, vMin, vMax) {
+    const range = (vMax - vMin) || 1;
+    const N = pts.length;
+    const target = Math.min(N, CHART_W);                 // ≤1 sample per pixel
+    const step = Math.max(1, Math.floor(N / target));
+    const linePts = [];
+    for (let i = 0; i < N; i += step) {
+      const v = getValue(pts[i]);
+      if (v === null || isNaN(v)) continue;
+      const x = ((pts[i].time - t0) / dur) * CHART_W;
+      const y = CHART_H - PAD_Y - ((v - vMin) / range) * (CHART_H - 2 * PAD_Y);
+      linePts.push([x, y]);
+    }
+    // Ensure last point is included
+    const last = pts[N-1];
+    const vLast = getValue(last);
+    if (vLast !== null && !isNaN(vLast)) {
+      const x = CHART_W;
+      const y = CHART_H - PAD_Y - ((vLast - vMin) / range) * (CHART_H - 2 * PAD_Y);
+      linePts.push([x, y]);
+    }
+    if (!linePts.length) return { line: '', fill: '' };
+    const lineD = 'M ' + linePts.map(p => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join(' L ');
+    const fillD = lineD + ` L ${CHART_W} ${CHART_H} L 0 ${CHART_H} Z`;
+    return { line: lineD, fill: fillD };
+  }
+
+  const spd = buildSeries(p => p.speed, track.speedMin, track.speedMax);
+  document.getElementById('speed-line').setAttribute('d', spd.line);
+  document.getElementById('speed-fill').setAttribute('d', spd.fill);
+
+  const ele = buildSeries(p => p.eleSmooth, track.eleMin, track.eleMax);
+  document.getElementById('ele-line').setAttribute('d', ele.line);
+  document.getElementById('ele-fill').setAttribute('d', ele.fill);
+
+  // Cache time→x helpers for the cursor update in updateFrame
+  speedXOfTime = t => ((t - t0) / dur) * CHART_W;
+  eleXOfTime = speedXOfTime; // same axis
+
+  // Make charts scrubbable: click/drag on a chart sets progress
+  ['speed-chart', 'ele-chart'].forEach(id => {
+    const svg = document.getElementById(id);
+    const onMove = (e) => {
+      const rect = svg.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const p = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      progress = p;
+      updateFrame(p);
+      scrub.value = p * 1000;
+    };
+    let dragging = false;
+    svg.addEventListener('mousedown', e => { dragging = true; onMove(e); });
+    svg.addEventListener('mousemove', e => { if (dragging) onMove(e); });
+    window.addEventListener('mouseup', () => { dragging = false; });
+    svg.addEventListener('touchstart', e => { onMove(e); e.preventDefault(); }, { passive: false });
+    svg.addEventListener('touchmove', e => { onMove(e); e.preventDefault(); }, { passive: false });
+  });
+}
+
+function updateCharts(targetTime, speedVal, eleVal) {
+  if (!speedXOfTime) return;
+  const x = speedXOfTime(targetTime);
+  const range = track.speedMax - track.speedMin || 1;
+  const ySpd = CHART_H - PAD_Y - ((speedVal - track.speedMin) / range) * (CHART_H - 2 * PAD_Y);
+  document.getElementById('speed-cursor').setAttribute('x1', x);
+  document.getElementById('speed-cursor').setAttribute('x2', x);
+  document.getElementById('speed-dot').setAttribute('cx', x);
+  document.getElementById('speed-dot').setAttribute('cy', ySpd);
+
+  if (eleVal !== null) {
+    const eRange = track.eleMax - track.eleMin || 1;
+    const yEle = CHART_H - PAD_Y - ((eleVal - track.eleMin) / eRange) * (CHART_H - 2 * PAD_Y);
+    document.getElementById('ele-cursor').setAttribute('x1', x);
+    document.getElementById('ele-cursor').setAttribute('x2', x);
+    document.getElementById('ele-dot').setAttribute('cx', x);
+    document.getElementById('ele-dot').setAttribute('cy', yEle);
+  }
+}
+
+
+/* ─────────── Animation ─────────── */
+const btnPlay = document.getElementById('btn-play');
+const iconPlay = document.getElementById('icon-play');
+const iconPause = document.getElementById('icon-pause');
+const scrub = document.getElementById('scrub');
+const speedSel = document.getElementById('speed');
+
+btnPlay.onclick = () => isPlaying ? pauseAnim() : playAnim();
+speedSel.onchange = () => speedMul = parseFloat(speedSel.value);
+scrub.oninput = () => {
+  progress = parseFloat(scrub.value) / 1000;
+  updateFrame(progress);
+};
+
+// Spacebar = play/pause (ignore when typing in an input)
+document.addEventListener('keydown', e => {
+  if (e.code !== 'Space') return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (!track) return;
+  e.preventDefault();
+  isPlaying ? pauseAnim() : playAnim();
+});
+
+const btnFollow = document.getElementById('btn-follow');
+btnFollow.onclick = () => {
+  followRider = !followRider;
+  btnFollow.classList.toggle('active', followRider);
+  if (followRider) {
+    // Snap the chase-cam bearing on the next frame (no spin-up from north)
+    followBearing = null;
+    // Ease into a chase view: zoom in, tilt (in 3D), and rotate so travel faces "up"
+    const cur = map.getSource('rider-src');
+    if (cur && cur._data && cur._data.geometry) {
+      map.easeTo({
+        center: cur._data.geometry.coordinates,
+        zoom: Math.max(map.getZoom(), 17),
+        bearing: lastHeading,
+        pitch: is3D ? Math.max(map.getPitch(), 60) : map.getPitch(),
+        duration: 800
+      });
+    }
+  } else {
+    // Release the chase cam: level the heading back to north so the map reads normally
+    followBearing = null;
+    map.easeTo({ bearing: 0, duration: 600 });
+  }
+};
+
+// Disable follow-rider only on a manual PAN (drag). Zoom and pinch keep follow on,
+// so the user can zoom in/out freely while the chase cam keeps tracking.
+map.on('dragstart', () => {
+  if (followRider) {
+    followRider = false;
+    followBearing = null;
+    btnFollow.classList.remove('active');
+    map.easeTo({ bearing: 0, duration: 600 });
+  }
+});
+
+/* Initial-bearing great-circle heading from A→B, in degrees (0 = north) */
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const toRad = x => x * Math.PI / 180, toDeg = x => x * 180 / Math.PI;
+  const p1 = toRad(lat1), p2 = toRad(lat2), dl = toRad(lon2 - lon1);
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/* Stable travel direction at the current point, sampled over a ±30 m window so
+   per-second GPS jitter doesn't make the camera twitch. */
+function travelHeading(pts, i, dist) {
+  let bi = i;
+  while (bi > 0 && (dist - pts[bi].cumDist) < HEADING_LOOK_KM) bi--;
+  let fi = i;
+  while (fi < pts.length - 1 && (pts[fi].cumDist - dist) < HEADING_LOOK_KM) fi++;
+  const a = pts[bi], b = pts[fi];
+  if (a === b) return lastHeading;
+  return bearingDeg(a.lat, a.lon, b.lat, b.lon);
+}
+
+/* Shortest signed angular delta b−a, normalised to [−180, 180] */
+function angleDelta(a, b) {
+  let d = (b - a + 540) % 360 - 180;
+  return d;
+}
+
+function playAnim() {
+  if (!track) return;
+  isPlaying = true;
+  iconPlay.style.display = 'none';
+  iconPause.style.display = 'block';
+  lastFrameTime = performance.now();
+  rafId = requestAnimationFrame(tick);
+}
+
+function pauseAnim() {
+  isPlaying = false;
+  iconPlay.style.display = 'block';
+  iconPause.style.display = 'none';
+  if (rafId) cancelAnimationFrame(rafId);
+}
+
+function tick(now) {
+  if (!isPlaying) return;
+  const dt = now - lastFrameTime;
+  lastFrameTime = now;
+
+  // Advance progress: dt(ms) * speedMul = simulated ms; divide by duration
+  progress += (dt * speedMul) / track.duration;
+  if (progress >= 1) { progress = 1; pauseAnim(); }
+
+  updateFrame(progress);
+  scrub.value = progress * 1000;
+
+  if (isPlaying) rafId = requestAnimationFrame(tick);
+}
+
+function updateFrame(p) {
+  if (!track) return;
+  // Guard: sources may not be ready yet (map style still loading)
+  const trailSrc = map.getSource('trail-src');
+  const riderSrc = map.getSource('rider-src');
+  if (!trailSrc || !riderSrc) {
+    console.warn('[replay] updateFrame called before sources ready, skipping');
+    return;
+  }
+
+  const targetTime = track.startTime + p * track.duration;
+
+  // Find current segment & interpolate
+  const pts = track.points;
+  let i = 0;
+  while (i < pts.length - 1 && pts[i+1].time < targetTime) i++;
+  const a = pts[i], b = pts[Math.min(i+1, pts.length-1)];
+  const segDur = b.time - a.time || 1;
+  const t = (targetTime - a.time) / segDur;
+  const lon = a.lon + (b.lon - a.lon) * t;
+  const lat = a.lat + (b.lat - a.lat) * t;
+  const ele = (a.eleSmooth !== null && b.eleSmooth !== null) ? a.eleSmooth + (b.eleSmooth - a.eleSmooth) * t : null;
+  const dist = a.cumDist + (b.cumDist - a.cumDist) * t;
+  const speed = a.speed + (b.speed - a.speed) * t;
+
+  // Update trail source: all points up to i + interpolated current
+  const trailCoords = pts.slice(0, i+1).map(pp => [pp.lon, pp.lat]);
+  trailCoords.push([lon, lat]);
+  trailSrc.setData({
+    type: 'Feature', geometry: { type: 'LineString', coordinates: trailCoords }
+  });
+  riderSrc.setData({
+    type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }
+  });
+
+  // Travel direction at the current point (always tracked, used by the chase cam)
+  lastHeading = travelHeading(pts, i, dist);
+
+  // Auto-follow: keep the rider centered, heading-up, with rotation smoothed over
+  // DISTANCE (see SMOOTH_DIST_KM). Only center + bearing are set — zoom and pitch
+  // stay under user control, so the rider can zoom freely while tracking.
+  if (followRider) {
+    if (followBearing === null) {
+      followBearing = lastHeading;                                  // snap on first frame
+    } else {
+      const dKm = Math.abs(dist - lastDistForCam);
+      const alpha = 1 - Math.exp(-dKm / SMOOTH_DIST_KM);            // distance-based low-pass
+      followBearing = (followBearing + angleDelta(followBearing, lastHeading) * alpha + 360) % 360;
+    }
+    map.jumpTo({ center: [lon, lat], bearing: followBearing });
+  }
+  lastDistForCam = dist;
+
+  // Update timestamp (shown on the scrubber)
+  const d = new Date(targetTime);
+  document.getElementById('scrub-current').textContent = fmtTime(d);
+
+  // Info panel
+  document.getElementById('info-speed').innerHTML = speed.toFixed(1) + '<span class="unit">km/h</span>';
+  document.getElementById('info-distance').innerHTML = dist.toFixed(2) + '<span class="unit">km</span>';
+  document.getElementById('info-elev').innerHTML = (ele !== null ? ele.toFixed(0) : '—') + '<span class="unit">m</span>';
+
+  // Update chart cursors
+  updateCharts(targetTime, speed, ele);
+}
+
+/* ─────────── Format helpers (Cambodia local time, UTC+7, no DST) ─────────── */
+const TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
+function fmtDate(d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const local = new Date(d.getTime() + TZ_OFFSET_MS);
+  return `${String(local.getUTCDate()).padStart(2,'0')} ${months[local.getUTCMonth()]} ${local.getUTCFullYear()}`;
+}
+function fmtTime(d) {
+  const local = new Date(d.getTime() + TZ_OFFSET_MS);
+  return `${String(local.getUTCHours()).padStart(2,'0')}:${String(local.getUTCMinutes()).padStart(2,'0')}:${String(local.getUTCSeconds()).padStart(2,'0')}`;
+}
+
+/* ─────────── Deep links: ?demo  or  ?track=<url> ─────────── */
+(function initFromQuery() {
+  const q = new URLSearchParams(location.search);
+  if (q.has('demo')) { loadDemo(); return; }
+  const t = q.get('track');
+  if (t) loadFromUrl(t);
+})();
+</script>
+</body>
+</html>
